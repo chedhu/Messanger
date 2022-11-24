@@ -1,71 +1,146 @@
+
 package com.example.messages.Fragments;
-
-import android.os.Bundle;
-
-import androidx.annotation.NonNull;
-import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.LinearLayoutManager;
-
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
-import com.example.messages.Adapter.UsersAdapter;
-import com.example.messages.Models.Users;
-import com.example.messages.R;
-import com.example.messages.databinding.FragmentChatsBinding;
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+
+
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 
-public class ChatsFragment extends Fragment {
+public class ChatsAdapter extends RecyclerView.Adapter{
 
+    ArrayList<MessageModel> wMessageModel;
+    Context wContext;
+    String recId;
 
-    public ChatsFragment() {
-        // Required empty public constructor
+    int W_SENDER_VIEW_TYPE = 1;
+    int W_RECIEVER_VIEW_TYPE = 2;
+
+    public ChatsAdapter(ArrayList<MessageModel> wMessageModel, Context wContext) {
+        this.wMessageModel = wMessageModel;
+        this.wContext = wContext;
     }
 
-    FragmentChatsBinding mBinding;
-    ArrayList<Users> wList = new ArrayList<>();
-    FirebaseDatabase mDatabase;
+    public ChatsAdapter(ArrayList<MessageModel> wMessageModel, Context wContext, String recId) {
+        this.wMessageModel = wMessageModel;
+        this.wContext = wContext;
+        this.recId = recId;
+    }
+
+    @NonNull
+    @Override
+    public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        if(viewType==W_SENDER_VIEW_TYPE){
+            View wView = LayoutInflater.from(wContext).inflate(R.layout.sample_send,parent,false);
+            return new SenderViewHolder(wView);
+        }
+        else{
+            View wView = LayoutInflater.from(wContext).inflate(R.layout.sample_receive,parent,false);
+            return new RecieverViewHolder(wView);
+        }
+    }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
-        mBinding=FragmentChatsBinding.inflate(inflater,container,false);
-        mDatabase=FirebaseDatabase.getInstance();
+    public int getItemViewType(int position) {
+        if(wMessageModel.get(position).getwUId().equals(FirebaseAuth.getInstance().getUid()))
+        {
+            return W_SENDER_VIEW_TYPE;
+        }
+        else{
+            return W_RECIEVER_VIEW_TYPE;
+        }
+    }
 
-        UsersAdapter wAdapter = new UsersAdapter(wList,getContext());
-        mBinding.wChatRecyclerView.setAdapter(wAdapter);
+    @Override
+    public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
 
-        LinearLayoutManager wLinearLayoutManager = new LinearLayoutManager(getContext());
-        mBinding.wChatRecyclerView.setLayoutManager(wLinearLayoutManager);
+        MessageModel messageModel = wMessageModel.get(position);
 
-        mDatabase.getReference().child("Users").addValueEventListener(new ValueEventListener() {
+        holder.itemView.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
-            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                wList.clear();
-                for(DataSnapshot wDataSnapshot : snapshot.getChildren()){
-                    Users mUser = wDataSnapshot.getValue(Users.class);
-                    mUser.setUserId(wDataSnapshot.getKey());
-                    if(!mUser.getUserId().equals(FirebaseAuth.getInstance().getUid())){
-                        wList.add(mUser);
-                    }
-                }
-                wAdapter.notifyDataSetChanged();
-            }
+            public boolean onLongClick(View v) {
 
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
+                new AlertDialog.Builder(wContext)
+                        .setTitle("Delete")
+                        .setMessage("Are you Sure you want to delete this message?")
+                        .setPositiveButton("yes", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                FirebaseDatabase wDatabase = FirebaseDatabase.getInstance();
+                                String wSenderRoom = FirebaseAuth.getInstance().getUid() + recId;
+                                wDatabase.getReference().child("chats").child(wSenderRoom)
+                                        .child(messageModel.getwMessageId())
+                                        .setValue(null);
+                            }
+                        }).setNegativeButton("No", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                dialogInterface.dismiss();
+                            }
+                        }).show();
 
+                return false;
             }
         });
 
-        return mBinding.getRoot();
+        if(holder.getClass()  == SenderViewHolder.class){
+            ((SenderViewHolder)holder).wSenderMsg.setText(messageModel.getwMessage());
+
+            Date wDate = new Date(messageModel.getwTimestamp());
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("h:mm a");
+            String wstrDate = simpleDateFormat.format(wDate);
+            ((SenderViewHolder)holder).wSenderTime.setText(wstrDate);
+        }
+        else{
+            ((RecieverViewHolder)holder).wRecieverMsg.setText(messageModel.getwMessage());
+
+            Date wDate = new Date(messageModel.getwTimestamp());
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("h:mm a");
+            String wstrDate = simpleDateFormat.format(wDate);
+            ((RecieverViewHolder)holder).wRecieverTime.setText(wstrDate);
+        }
+
+    }
+
+    @Override
+    public int getItemCount() {
+        return wMessageModel.size();
+    }
+
+    public class RecieverViewHolder extends RecyclerView.ViewHolder{
+
+        TextView wRecieverMsg , wRecieverTime;
+
+        public RecieverViewHolder(@NonNull View itemView) {
+            super(itemView);
+
+            wRecieverMsg=itemView.findViewById(R.id.wReceiveText);
+            wRecieverTime=itemView.findViewById(R.id.wReceiveTime);
+
+        }
+    }
+
+    public class SenderViewHolder extends RecyclerView.ViewHolder{
+
+        TextView wSenderMsg , wSenderTime;
+
+        public SenderViewHolder(@NonNull View itemView) {
+            super(itemView);
+
+            wSenderMsg=itemView.findViewById(R.id.wSendText);
+            wSenderTime=itemView.findViewById(R.id.wSendTime);
+        }
     }
 }

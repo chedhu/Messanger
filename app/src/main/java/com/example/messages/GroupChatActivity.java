@@ -1,96 +1,147 @@
-package com.example.messages;
+
+
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
-import android.content.Intent;
-import android.os.Bundle;
-import android.view.View;
-import android.widget.Toast;
-
-import com.example.messages.Adapter.ChatsAdapter;
-import com.example.messages.Models.MessageModel;
-import com.example.messages.databinding.ActivityGroupChatBinding;
-import com.google.android.gms.tasks.OnSuccessListener;
+import com.example.myapplication.messages.Models.MessageModel;
+import com.example.myapplication.messages.R;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 
-public class GroupChatActivity extends AppCompatActivity {
+public class ChatsAdapter extends RecyclerView.Adapter{
 
-    ActivityGroupChatBinding mBinding;
+    ArrayList<MessageModel> wMessageModel;
+    Context wContext;
+    String recId;
 
+    int W_SENDER_VIEW_TYPE = 1;
+    int W_RECIEVER_VIEW_TYPE = 2;
+
+    public ChatsAdapter(ArrayList<MessageModel> wMessageModel, Context wContext) {
+        this.wMessageModel = wMessageModel;
+        this.wContext = wContext;
+    }
+
+    public ChatsAdapter(ArrayList<MessageModel> wMessageModel, Context wContext, String recId) {
+        this.wMessageModel = wMessageModel;
+        this.wContext = wContext;
+        this.recId = recId;
+    }
+
+    @NonNull
+    @Override
+    public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        if(viewType==W_SENDER_VIEW_TYPE){
+            View wView = LayoutInflater.from(wContext).inflate(R.layout.sample_send,parent,false);
+            return new SenderViewHolder(wView);
+        }
+        else{
+            View wView = LayoutInflater.from(wContext).inflate(R.layout.sample_receive,parent,false);
+            return new RecieverViewHolder(wView);
+        }
+    }
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mBinding = ActivityGroupChatBinding.inflate(getLayoutInflater());
+    public int getItemViewType(int position) {
+        if(wMessageModel.get(position).getwUId().equals(FirebaseAuth.getInstance().getUid()))
+        {
+            return W_SENDER_VIEW_TYPE;
+        }
+        else{
+            return W_RECIEVER_VIEW_TYPE;
+        }
+    }
 
-        setContentView(mBinding.getRoot());
+    @Override
+    public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
 
-        getSupportActionBar().hide();
+        MessageModel messageModel = wMessageModel.get(position);
 
-        mBinding.wBackArrow.setOnClickListener(new View.OnClickListener() {
+        holder.itemView.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
-            public void onClick(View v) {
-                Intent mIntent = new Intent(GroupChatActivity.this,MainActivity.class);
-                startActivity(mIntent);
+            public boolean onLongClick(View v) {
 
+                new AlertDialog.Builder(wContext)
+                        .setTitle("Delete")
+                        .setMessage("Are you Sure you want to delete this message?")
+                        .setPositiveButton("yes", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                FirebaseDatabase wDatabase = FirebaseDatabase.getInstance();
+                                String wSenderRoom = FirebaseAuth.getInstance().getUid() + recId;
+                                wDatabase.getReference().child("chats").child(wSenderRoom)
+                                        .child(messageModel.getwMessageId())
+                                        .setValue(null);
+                            }
+                        }).setNegativeButton("No", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                dialogInterface.dismiss();
+                            }
+                        }).show();
+
+                return false;
             }
         });
 
-        final FirebaseDatabase mDatabase = FirebaseDatabase.getInstance();
-        final ArrayList<MessageModel> messageModels = new ArrayList<>();
+        if(holder.getClass()  == SenderViewHolder.class){
+            ((SenderViewHolder)holder).wSenderMsg.setText(messageModel.getwMessage());
 
-        final String SenderId = FirebaseAuth.getInstance().getUid();
-        mBinding.txtUsername.setText("Group Chat");
+            Date wDate = new Date(messageModel.getwTimestamp());
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("h:mm a");
+            String wstrDate = simpleDateFormat.format(wDate);
+            ((SenderViewHolder)holder).wSenderTime.setText(wstrDate);
+        }
+        else{
+            ((RecieverViewHolder)holder).wRecieverMsg.setText(messageModel.getwMessage());
 
-        final ChatsAdapter wChatAdapter = new ChatsAdapter(messageModels,this);
-        mBinding.ChatRecyclerView.setAdapter(wChatAdapter);
+            Date wDate = new Date(messageModel.getwTimestamp());
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("h:mm a");
+            String wstrDate = simpleDateFormat.format(wDate);
+            ((RecieverViewHolder)holder).wRecieverTime.setText(wstrDate);
+        }
 
-        LinearLayoutManager wLinearLayoutManager = new LinearLayoutManager(this);
-        mBinding.ChatRecyclerView.setLayoutManager(wLinearLayoutManager);
+    }
 
-        mDatabase.getReference().child("Group Chats")
-                        .addValueEventListener(new ValueEventListener() {
-                            @Override
-                            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                                messageModels.clear();
-                                for(DataSnapshot dataSnapshot : snapshot.getChildren()){
-                                    MessageModel model = dataSnapshot.getValue(MessageModel.class);
-                                    messageModels.add(model);
-                                }
-                                wChatAdapter.notifyDataSetChanged();
-                            }
+    @Override
+    public int getItemCount() {
+        return wMessageModel.size();
+    }
 
-                            @Override
-                            public void onCancelled(@NonNull DatabaseError error) {
+    public class RecieverViewHolder extends RecyclerView.ViewHolder{
 
-                            }
-                        });
+        TextView wRecieverMsg , wRecieverTime;
 
-        mBinding.arrowSend.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                final String wMessage = mBinding.wEnterMessage.getText().toString();
-                final MessageModel wModel = new MessageModel(SenderId,wMessage);
-                wModel.setwTimestamp(new Date().getTime());
-                mBinding.wEnterMessage.setText("");
+        public RecieverViewHolder(@NonNull View itemView) {
+            super(itemView);
 
-                mDatabase.getReference().child("Group Chats").push()
-                        .setValue(wModel).addOnSuccessListener(new OnSuccessListener<Void>() {
-                            @Override
-                            public void onSuccess(Void unused) {
-                                Toast.makeText(GroupChatActivity.this, "Message Sent", Toast.LENGTH_SHORT).show();
-                            }
-                        });
-            }
-        });
+            wRecieverMsg=itemView.findViewById(R.id.wReceiveText);
+            wRecieverTime=itemView.findViewById(R.id.wReceiveTime);
+
+        }
+    }
+
+    public class SenderViewHolder extends RecyclerView.ViewHolder{
+
+        TextView wSenderMsg , wSenderTime;
+
+        public SenderViewHolder(@NonNull View itemView) {
+            super(itemView);
+
+            wSenderMsg=itemView.findViewById(R.id.wSendText);
+            wSenderTime=itemView.findViewById(R.id.wSendTime);
+        }
     }
 }
